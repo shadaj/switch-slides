@@ -6,6 +6,7 @@ import java.awt.event.{InputEvent, KeyEvent}
 import com.lynbrookrobotics.potassium.Signal
 import com.lynbrookrobotics.potassium.clock.JavaClock
 import net.java.games.input.ControllerEnvironment
+import org.hid4java.HidManager
 import squants.space.{Angle, Degrees}
 import squants.time.Milliseconds
 
