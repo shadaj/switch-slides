@@ -7,6 +7,7 @@ libraryDependencies += "org.hid4java" % "hid4java" % "0.5.0"
 
 resolvers += "Funky-Repo" at "http://team846.github.io/repo"
 
-libraryDependencies += "com.lynbrookrobotics" %% "potassium-core" % "0.1.0-25794012"
+libraryDependencies += "com.lynbrookrobotics" %% "potassium-core" % "0.1.0-124917e8"
+libraryDependencies += "com.lynbrookrobotics" %% "potassium-sensors" % "0.1.0-124917e8"
 
-libraryDependencies += "com.lynbrookrobotics" %% "funky-dashboard" % "0.3.0-SNAPSHOT"
+libraryDependencies += "com.lynbrookrobotics" %% "funky-dashboard" % "0.3.1"
