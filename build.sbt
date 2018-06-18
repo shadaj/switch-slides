@@ -11,3 +11,7 @@ libraryDependencies += "com.lynbrookrobotics" %% "potassium-core" % "0.1.0-12491
 libraryDependencies += "com.lynbrookrobotics" %% "potassium-sensors" % "0.1.0-124917e8"
 
 libraryDependencies += "com.lynbrookrobotics" %% "funky-dashboard" % "0.3.1"
+
+fork in run := true
+connectInput in run := true
+cancelable in run := true

@@ -11,7 +11,12 @@ import org.hid4java.HidManager
 import squants.motion.{AngularVelocity, DegreesPerSecond}
 import squants.time.Milliseconds
 
+import java.awt.Robot
+import java.awt.event.{InputEvent, KeyEvent}
+
 object HidHack extends App {
+  val robot = new Robot()
+
   implicit val clock = JavaClock
   val hidServices = HidManager.getHidServices
   val joyConHid = hidServices.getHidDevice(0x57e, 0x2007, null)
@@ -38,14 +43,21 @@ object HidHack extends App {
     into
   }
 
+  def readData() = {
+    val into = new Array[Byte](64)
+    joyConHid.read(into)
+
+    into
+  }
+
   def sendSubcommand(command: Byte, subcommand: Byte, data: Seq[Byte]): Array[Byte] = {
     val commandData = (Seq(globalSubcommandIterator.next(), 0x00.toByte, 0x01.toByte, 0x40.toByte, 0x40.toByte, 0x00.toByte, 0x01.toByte, 0x40.toByte, 0x40.toByte) :+ subcommand) ++ data
     sendCommand(command, commandData)
   }
 
-  sendSubcommand(0x1, 0x48, Seq(0x01)) // enable vibration
-  sendSubcommand(0x1, 0x40, Seq(0x01)) // enable IMU
-  sendSubcommand(0x1, 0x3, Seq(0x30)) // set to standard full mode
+  // sendSubcommand(0x1, 0x48, Seq(0x01)) // enable vibration
+  // sendSubcommand(0x1, 0x40, Seq(0x01)) // enable IMU
+  sendSubcommand(0x1, 0x3, Seq(0x3F)) // set to only push on button press
   sendSubcommand(0x1, 0x30, Seq(1)) // set player light to 1
 
   sealed trait Button
@@ -58,16 +70,12 @@ object HidHack extends App {
   case object R extends Button
   case object ZR extends Button
 
-  def buttonStatus(result: Seq[Byte]): List[Button] = {
+  def buttonStatus(buttonByte: Byte): List[Button] = {
     val byte2Buttons = List(
-      0x01 -> Y,
+      0x01 -> A,
       0x02 -> X,
       0x04 -> B,
-      0x08 -> A,
-      0x10 -> SR,
-      0x20 -> SL,
-      0x40 -> R,
-      0x80 -> ZR
+      0x08 -> Y
     )
 
     def getButtonsForByte(byte: Byte, mapping: List[(Int, Button)]): List[Button] = {
@@ -76,58 +84,31 @@ object HidHack extends App {
       }.map(_._2)
     }
 
-    getButtonsForByte(result(2), byte2Buttons)
+    getButtonsForByte(buttonByte, byte2Buttons)
   }
 
-  var lastRollRaw: Short = 0
-  var lastPitchRaw: Short = 0
-  var lastYawRaw: Short = 0
-
-  val gyro = new DigitalGyro(Milliseconds(10)) {
-    override def retrieveVelocity: Value3D[AngularVelocity] = {
-      Value3D(
-        DegreesPerSecond(lastRollRaw * (4588D / 65535)),
-        DegreesPerSecond(lastPitchRaw * (4588D / 65535)),
-        DegreesPerSecond(lastYawRaw * (4588D / 65535))
-      )
+  val (buttonData, pushData) = Stream.manual[List[Button]]
+  
+  var stop = false
+  val thread = new Thread(() => {
+    while (!stop) {
+      val packetID +: result = readData().toSeq // ignore packet ID
+      pushData(buttonStatus(result.head))
     }
-  }
+  })
 
-  def readGyroAccelPair(byte1: Byte, byte2: Byte): Short = {
-    ByteBuffer.wrap(Array(byte1, byte2)).order(ByteOrder.LITTLE_ENDIAN).getShort()
-  }
+  thread.start()
 
-  val gyroData = Stream.periodic(Milliseconds(10)) {
-    val packetID +: result = sendSubcommand(0x1F.toByte, 0x0, Seq()).toSeq // ignore packet ID
+  buttonData.eventWhen(_.contains(A)).onStart.foreach(() => {
+    robot.keyPress(KeyEvent.VK_RIGHT)
+    robot.keyRelease(KeyEvent.VK_RIGHT)
+  })
 
-    lastRollRaw = readGyroAccelPair(result(18), result(19))
-    lastPitchRaw = readGyroAccelPair(result(20), result(21))
-    lastYawRaw = readGyroAccelPair(result(22), result(23))
+  buttonData.eventWhen(_.contains(B)).onStart.foreach(() => {
+    robot.keyPress(KeyEvent.VK_LEFT)
+    robot.keyRelease(KeyEvent.VK_LEFT)
+  })
 
-    gyro.getVelocities
-  }
-
-
-  Thread.sleep(5000)
-  gyro.endCalibration()
-
-  implicit class ToTimeSeriesNumeric[T](val stream: Stream[T]) extends AnyVal {
-    def toTimeSeriesNumeric(name: String)(implicit ev: T => Double): TimeSeriesNumeric = {
-      var lastValue: Double = 0.0
-      new TimeSeriesNumeric(name)(lastValue) {
-        stream.foreach { v =>
-          lastValue = v
-        }
-      }
-    }
-  }
-
-  val dashboard = new FunkyDashboard(50, 8080)
-  val integrated = gyroData.map(_.x).integral.zip(gyroData.map(_.y).integral).zip(gyroData.map(_.z).integral).map { case ((roll, pitch), yaw) =>
-    Value3D(roll, pitch, yaw)
-  }
-  dashboard.datasetGroup("Gyro").addDataset(integrated.map(_.x.toDegrees).toTimeSeriesNumeric("Roll"))
-  dashboard.datasetGroup("Gyro").addDataset(integrated.map(_.y.toDegrees).toTimeSeriesNumeric("Pitch"))
-  dashboard.datasetGroup("Gyro").addDataset(integrated.map(_.z.toDegrees).toTimeSeriesNumeric("Yaw"))
-  dashboard.start()
+  readLine()
+  stop = true
 }
