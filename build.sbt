@@ -14,4 +14,4 @@ libraryDependencies += "com.lynbrookrobotics" %% "funky-dashboard" % "0.3.1"
 
 fork in run := true
 connectInput in run := true
-cancelable in run := true
+cancelable in Global := true
